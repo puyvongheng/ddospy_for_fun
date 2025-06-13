@@ -198,7 +198,7 @@ def main():
     choice = input("Choose option: ")
 
     if choice == "1":
-        add_100_students(100)
+        add_100_students(1000000)
     elif choice == "2":
         delete_all_students()
     elif choice == "3":
