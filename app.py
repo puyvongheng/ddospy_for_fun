@@ -25,7 +25,6 @@ logs_lock = threading.Lock()
 def log(message):
     with logs_lock:
         logs.append(message)
-        # Keep only last 200 logs to limit memory
         if len(logs) > 200:
             logs.pop(0)
 
@@ -44,7 +43,7 @@ def add_student():
         res = requests.post(API_ADD, json=student)
         if res.status_code == 200:
             success_count += 1
-            log(f"✅ Added: {student['fullname']}  (cont ){success_count}  ")
+            log(f"✅ Added: {student['fullname']}  (count {success_count})")
         else:
             failure_count += 1
             log(f"❌ Failed: {res.status_code} - {res.text}")
@@ -56,7 +55,7 @@ def add_students(n):
     log(f"🚀 Starting to add {n} students...")
     for i in range(1, n+1):
         add_student()
-        time.sleep(0.1)  # small delay to avoid burst
+        time.sleep(0.1)
     log(f"✅ Finished adding {n} students. Success: {success_count}, Failures: {failure_count}")
 
 @app.route("/", methods=["GET"])
@@ -66,21 +65,110 @@ def index():
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Student API Test Tool</title>
+<title>🎓 Student API Hacker Console</title>
 <style>
-  body { font-family: monospace; background: #222; color: #eee; }
-  #console { background: #000; padding: 10px; height: 400px; overflow-y: scroll; border: 2px solid #0f0; }
-  input[type=number] { width: 80px; }
-  button { font-size: 1rem; }
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+  body {
+    background: #0f0f0f;
+    color: #00ff00;
+    font-family: 'Share Tech Mono', monospace;
+    margin: 0; padding: 20px;
+    user-select: none;
+  }
+
+  h2 {
+    text-align: center;
+    letter-spacing: 2px;
+    text-shadow:
+      0 0 5px #00ff00,
+      0 0 10px #00ff00,
+      0 0 20px #00ff00,
+      0 0 40px #0f0;
+  }
+
+  form {
+    text-align: center;
+    margin-bottom: 20px;
+  }
+
+  input[type=number] {
+    width: 80px;
+    background: #111;
+    border: 1px solid #00ff00;
+    color: #00ff00;
+    padding: 5px 10px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1.2rem;
+    outline: none;
+    border-radius: 3px;
+  }
+
+  input[type=number]:focus {
+    box-shadow: 0 0 10px #00ff00;
+  }
+
+  button {
+    background: #000;
+    border: 1px solid #00ff00;
+    color: #00ff00;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1.2rem;
+    padding: 5px 15px;
+    cursor: pointer;
+    border-radius: 3px;
+    margin-left: 10px;
+    transition: 0.3s ease;
+  }
+
+  button:hover {
+    background: #00ff00;
+    color: #000;
+    box-shadow:
+      0 0 5px #00ff00,
+      0 0 20px #00ff00;
+  }
+
+  #console {
+    background: #000;
+    border: 2px solid #00ff00;
+    padding: 15px;
+    height: 400px;
+    overflow-y: scroll;
+    white-space: pre-wrap;
+    font-size: 1rem;
+    line-height: 1.4;
+    box-shadow:
+      inset 0 0 10px #00ff00,
+      0 0 20px #00ff00;
+    position: relative;
+  }
+
+  /* Blinking cursor effect */
+  #console::after {
+    content: '|';
+    position: absolute;
+    bottom: 15px;
+    left: 15px;
+    color: #00ff00;
+    animation: blink 1s steps(2, start) infinite;
+    font-weight: bold;
+  }
+
+  @keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+  }
 </style>
 </head>
 <body>
-<h2>🎓 Student API Test Tool - Live Console</h2>
+
+<h2>🎓 Student API Hacker Console</h2>
 
 <form id="runForm">
   <label for="count">Add how many students?</label>
   <input type="number" id="count" name="count" min="1" max="1000" value="10" required />
-  <button type="submit">Start Adding</button>
+  <button type="submit">🚀 Start Adding</button>
 </form>
 
 <div id="console"></div>
@@ -90,7 +178,7 @@ const consoleDiv = document.getElementById('console');
 const runForm = document.getElementById('runForm');
 
 function escapeHtml(text) {
-  var div = document.createElement('div');
+  const div = document.createElement('div');
   div.innerText = text;
   return div.innerHTML;
 }
@@ -100,11 +188,11 @@ async function fetchLogs() {
     const res = await fetch('/log');
     if (res.ok) {
       const data = await res.json();
-      consoleDiv.innerHTML = data.logs.map(escapeHtml).join('<br>');
+      consoleDiv.innerHTML = data.logs.map(escapeHtml).join('\\n');
       consoleDiv.scrollTop = consoleDiv.scrollHeight;
     }
   } catch(e) {
-    consoleDiv.innerHTML += `<br>❌ Error fetching logs: ${e}`;
+    consoleDiv.innerHTML += `\\n❌ Error fetching logs: ${e}`;
   }
 }
 
@@ -133,7 +221,6 @@ fetchLogs();
 @app.route("/run", methods=["POST"])
 def run():
     count = int(request.form.get("count", 10))
-    # Start background thread
     threading.Thread(target=add_students, args=(count,), daemon=True).start()
     return "", 204
 
