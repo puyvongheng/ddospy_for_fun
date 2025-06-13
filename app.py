@@ -186,31 +186,7 @@ def run_50_loops_each_5_threads():
         time.sleep(0.05)
 
 # ✅ CLI Menu
-def main():
-    print("\n🎓 STUDENT API TEST TOOL 🎓")
-    print("1. ➕ Add 100 students")
-    print("2. 🗑️ Delete ALL students")
-    print("3. 🧹 Delete 10 students")
-    print("4. 🚀 Dynamic add students (retry on fail)")
-    print("5. 🧵 Add 5 threads x 50 loops")
-    print("0. ❌ Exit")
 
-    choice = input("Choose option: ")
-
-    if choice == "1":
-        add_100_students(1000000)
-    elif choice == "2":
-        delete_all_students()
-    elif choice == "3":
-        delete_n_students(10)
-    elif choice == "4":
-        run_dynamic_add_students_threaded(target=50, threads_per_loop=5)
-    elif choice == "5":
-        run_50_loops_each_5_threads()
-    elif choice == "0":
-        print("👋 Exit")
-    else:
-        print("❌ Invalid option")
 
 if __name__ == "__main__":
-    main()
+    add_100_students(10000000)
