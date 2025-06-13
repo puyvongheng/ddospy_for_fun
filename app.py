@@ -1,34 +1,17 @@
-import subprocess
-import sys
-
-# 📦 Automatically install required libraries if missing
-def install_if_missing(package, import_name=None):
-    try:
-        __import__(import_name if import_name else package)
-    except ImportError:
-        print(f"📦 Installing missing package: {package}")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-
-# Auto-install required packages
-install_if_missing("requests")
-install_if_missing("faker", "faker")
-
-# Now safe to import
+from flask import Flask, render_template_string, request, jsonify
+import threading
+import time
 import requests
 import random
 from faker import Faker
-import time
-import threading
 
+app = Flask(__name__)
 fake = Faker()
 
 # API endpoints
 BASE_URL = "https://staging-student-score-d7vi.encr.app"
 API_ADD = f"{BASE_URL}/addtostudent"
-API_ALL = f"{BASE_URL}/allstudents"
-API_DELETE = f"{BASE_URL}/deletestudent"
 
-# Faculties and Genders
 faculties = ["IT", "Business", "Engineering", "Web develop", "Design"]
 genders = [
     "Male", "Female", "Transgender Male", "Transgender Female",
@@ -36,12 +19,19 @@ genders = [
     "Bigender", "Two-Spirit", "Intersex", "Other", "Prefer not to say"
 ]
 
-# Thread-safe counters
-lock = threading.Lock()
+logs = []
+logs_lock = threading.Lock()
+
+def log(message):
+    with logs_lock:
+        logs.append(message)
+        # Keep only last 200 logs to limit memory
+        if len(logs) > 200:
+            logs.pop(0)
+
 success_count = 0
 failure_count = 0
 
-# ✅ Add one student
 def add_student():
     global success_count, failure_count
     student = {
@@ -50,143 +40,107 @@ def add_student():
         "dob": fake.date_of_birth(minimum_age=17, maximum_age=24).strftime("%Y/%m/%d"),
         "faculty": random.choice(faculties)
     }
-
     try:
         res = requests.post(API_ADD, json=student)
         if res.status_code == 200:
-            with lock:
-                success_count += 1
-            print(f"✅ Added: {student['fullname']}")
+            success_count += 1
+            log(f"✅ Added: {student['fullname']}  (cont ){success_count}  ")
         else:
-            with lock:
-                failure_count += 1
-            print(f"❌ Failed: {res.status_code} - {res.text}")
-    except Exception as e:
-        with lock:
             failure_count += 1
-        print(f"❌ Error: {e}")
-
-# ✅ Fetch all students
-def fetch_all_students():
-    try:
-        res = requests.get(API_ALL)
-        if res.status_code == 200:
-            return res.json().get("items", [])
-        else:
-            print(f"❌ Fetch error: {res.status_code}")
+            log(f"❌ Failed: {res.status_code} - {res.text}")
     except Exception as e:
-        print(f"❌ Exception: {e}")
-    return []
+        failure_count += 1
+        log(f"❌ Error: {e}")
 
-# ✅ Delete student by ID
-def delete_student_by_id(student_id):
-    try:
-        res = requests.delete(f"{API_DELETE}/{student_id}")
-        if res.status_code == 200:
-            print(f"🗑️ Deleted ID: {student_id}")
-        else:
-            print(f"❌ Delete {student_id} failed — {res.status_code}: {res.text}")
-    except Exception as e:
-        print(f"❌ Exception while deleting {student_id}: {e}")
-
-# ✅ Delete ALL students
-def delete_all_students():
-    students = fetch_all_students()
-    print(f"⚠️ Deleting {len(students)} students...")
-    for s in students:
-        delete_student_by_id(s['id'])
-        time.sleep(0.01)
-
-# ✅ Delete N students
-def delete_n_students(n=10):
-    students = fetch_all_students()
-    print(f"⚠️ Deleting first {n} students...")
-    for s in students[:n]:
-        delete_student_by_id(s['id'])
-        time.sleep(0.01)
-
-# ✅ Add students (single thread)
-def add_100_students(n=100):
-    for i in range(1, n + 1):
+def add_students(n):
+    log(f"🚀 Starting to add {n} students...")
+    for i in range(1, n+1):
         add_student()
+        time.sleep(0.1)  # small delay to avoid burst
+    log(f"✅ Finished adding {n} students. Success: {success_count}, Failures: {failure_count}")
 
-# ✅ Add n students using threads
-def add_student_threaded(n=5):
-    threads = []
-    for _ in range(n):
-        t = threading.Thread(target=add_student)
-        threads.append(t)
-        t.start()
-        time.sleep(0.001)
-    for t in threads:
-        t.join()
+@app.route("/", methods=["GET"])
+def index():
+    return render_template_string("""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Student API Test Tool</title>
+<style>
+  body { font-family: monospace; background: #222; color: #eee; }
+  #console { background: #000; padding: 10px; height: 400px; overflow-y: scroll; border: 2px solid #0f0; }
+  input[type=number] { width: 80px; }
+  button { font-size: 1rem; }
+</style>
+</head>
+<body>
+<h2>🎓 Student API Test Tool - Live Console</h2>
 
-# ✅ Add students with retry logic
-def run_dynamic_add_students(target=50):
-    global success_count, failure_count
-    current = 0
+<form id="runForm">
+  <label for="count">Add how many students?</label>
+  <input type="number" id="count" name="count" min="1" max="1000" value="10" required />
+  <button type="submit">Start Adding</button>
+</form>
 
-    print(f"🚀 Starting dynamic thread add: Target {target}")
-    while current < target:
-        prev_success = success_count
-        prev_fail = failure_count
+<div id="console"></div>
 
-        print(f"\n➡️ Loop {current + 1} | ✅ Success: {success_count} ❌ Fail: {failure_count}")
-        add_student_threaded(n=1)
+<script>
+const consoleDiv = document.getElementById('console');
+const runForm = document.getElementById('runForm');
 
-        if success_count > prev_success:
-            current += 1
-        elif failure_count > prev_fail:
-            current = max(current - 1, 0)
+function escapeHtml(text) {
+  var div = document.createElement('div');
+  div.innerText = text;
+  return div.innerHTML;
+}
 
-        time.sleep(0.05)
+async function fetchLogs() {
+  try {
+    const res = await fetch('/log');
+    if (res.ok) {
+      const data = await res.json();
+      consoleDiv.innerHTML = data.logs.map(escapeHtml).join('<br>');
+      consoleDiv.scrollTop = consoleDiv.scrollHeight;
+    }
+  } catch(e) {
+    consoleDiv.innerHTML += `<br>❌ Error fetching logs: ${e}`;
+  }
+}
 
-# ✅ Dynamic threaded loop
-def run_dynamic_add_students_threaded(target=50, threads_per_loop=5):
-    global success_count, failure_count
-    current = 0
-    loop = 0
+runForm.onsubmit = async (e) => {
+  e.preventDefault();
+  const count = document.getElementById('count').value;
+  try {
+    await fetch('/run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: `count=${encodeURIComponent(count)}`
+    });
+  } catch (e) {
+    alert('Failed to start adding students: ' + e);
+  }
+}
 
-    print(f"🚀 Starting threaded dynamic add: Target {target} students")
+setInterval(fetchLogs, 1000);
+fetchLogs();
+</script>
 
-    while current < target:
-        prev_success = success_count
-        prev_failure = failure_count
+</body>
+</html>
+    """)
 
-        loop += 1
-        print(f"\n➡️ Loop {loop} | Current count: {current}/{target} | ✅ Success: {success_count} ❌ Fail: {failure_count}")
+@app.route("/run", methods=["POST"])
+def run():
+    count = int(request.form.get("count", 10))
+    # Start background thread
+    threading.Thread(target=add_students, args=(count,), daemon=True).start()
+    return "", 204
 
-        threads = []
-        for _ in range(threads_per_loop):
-            t = threading.Thread(target=add_student)
-            threads.append(t)
-            t.start()
-            time.sleep(0.001)
-
-        for t in threads:
-            t.join()
-
-        new_success = success_count - prev_success
-        new_fail = failure_count - prev_failure
-
-        current += new_success
-        current -= new_fail
-        current = max(current, 0)
-
-        time.sleep(0.05)
-
-    print(f"\n✅ Finished! Total success: {success_count}, Total fail: {failure_count}")
-
-# ✅ Static 5-thread loop x 50
-def run_50_loops_each_5_threads():
-    total = 50
-    for i in range(total):
-        print(f"\n➡️ Batch {i + 1}/{total}")
-        add_student_threaded(n=5)
-        time.sleep(0.05)
-
-# ✅ CLI Menu
-
+@app.route("/log", methods=["GET"])
+def get_log():
+    with logs_lock:
+        return jsonify(logs=logs)
 
 if __name__ == "__main__":
-    add_100_students(10000000)
+    app.run(debug=True)
