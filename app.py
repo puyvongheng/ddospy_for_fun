@@ -4,6 +4,7 @@ import time
 import requests
 import random
 from faker import Faker
+import os
 
 app = Flask(__name__)
 fake = Faker()
